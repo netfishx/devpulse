@@ -16,3 +16,8 @@ WHERE user_id = $1 AND provider = $2;
 SELECT id, user_id, provider, expires_at, created_at
 FROM data_sources
 WHERE user_id = $1;
+
+-- name: ListDataSourcesByProvider :many
+SELECT id, user_id, provider, created_at
+FROM data_sources
+WHERE provider = $1;

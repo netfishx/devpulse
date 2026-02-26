@@ -37,6 +37,44 @@ func (q *Queries) GetDataSourceByUserAndProvider(ctx context.Context, arg GetDat
 	return i, err
 }
 
+const listDataSourcesByProvider = `-- name: ListDataSourcesByProvider :many
+SELECT id, user_id, provider, created_at
+FROM data_sources
+WHERE provider = $1
+`
+
+type ListDataSourcesByProviderRow struct {
+	ID        int64              `json:"id"`
+	UserID    int64              `json:"user_id"`
+	Provider  string             `json:"provider"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+func (q *Queries) ListDataSourcesByProvider(ctx context.Context, provider string) ([]ListDataSourcesByProviderRow, error) {
+	rows, err := q.db.Query(ctx, listDataSourcesByProvider, provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDataSourcesByProviderRow{}
+	for rows.Next() {
+		var i ListDataSourcesByProviderRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Provider,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDataSourcesByUser = `-- name: ListDataSourcesByUser :many
 SELECT id, user_id, provider, expires_at, created_at
 FROM data_sources

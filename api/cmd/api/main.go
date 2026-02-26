@@ -4,15 +4,18 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
+	riverlib "github.com/riverqueue/river"
 
 	dbgen "github.com/ethanwang/devpulse/api/db/generated"
 	"github.com/ethanwang/devpulse/api/internal/apperror"
 	"github.com/ethanwang/devpulse/api/internal/auth"
 	"github.com/ethanwang/devpulse/api/internal/config"
+	"github.com/ethanwang/devpulse/api/internal/github"
 	mw "github.com/ethanwang/devpulse/api/internal/middleware"
 	"github.com/ethanwang/devpulse/api/internal/oauth"
 	riversetup "github.com/ethanwang/devpulse/api/internal/river"
@@ -35,22 +38,40 @@ func main() {
 	}
 	slog.Info("database connected")
 
-	// River job queue (insert-only until workers are registered)
-	riverClient, err := riversetup.NewClient(pool, nil, nil)
+	// Dependency injection
+	queries := dbgen.New(pool)
+
+	// GitHub client
+	ghClient := github.NewClient(nil)
+
+	// River workers
+	workers := riverlib.NewWorkers()
+	ghSyncWorker := github.NewSyncWorker(queries, ghClient)
+	riverlib.AddWorker(workers, ghSyncWorker)
+
+	// River periodic jobs
+	periodicJobs := []*riverlib.PeriodicJob{
+		riverlib.NewPeriodicJob(
+			riverlib.PeriodicInterval(1*time.Hour),
+			func() (riverlib.JobArgs, *riverlib.InsertOpts) {
+				return github.SyncArgs{}, nil
+			},
+			&riverlib.PeriodicJobOpts{RunOnStart: true},
+		),
+	}
+
+	// Create and start River client
+	riverClient, err := riversetup.NewClient(pool, workers, periodicJobs)
 	if err != nil {
 		slog.Error("failed to create river client", "error", err)
 		return
 	}
-
 	if err := riverClient.Start(context.Background()); err != nil {
 		slog.Error("failed to start river client", "error", err)
 		return
 	}
 	defer riverClient.Stop(context.Background()) //nolint:errcheck
 	slog.Info("river started")
-
-	// Dependency injection
-	queries := dbgen.New(pool)
 
 	authSvc := auth.NewService(queries, cfg.JWTSecret)
 	authHandler := auth.NewHandler(authSvc)
