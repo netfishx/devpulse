@@ -5,10 +5,60 @@
 package dbgen
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type RiverJobState string
+
+const (
+	RiverJobStateAvailable RiverJobState = "available"
+	RiverJobStateCancelled RiverJobState = "cancelled"
+	RiverJobStateCompleted RiverJobState = "completed"
+	RiverJobStateDiscarded RiverJobState = "discarded"
+	RiverJobStatePending   RiverJobState = "pending"
+	RiverJobStateRetryable RiverJobState = "retryable"
+	RiverJobStateRunning   RiverJobState = "running"
+	RiverJobStateScheduled RiverJobState = "scheduled"
+)
+
+func (e *RiverJobState) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RiverJobState(s)
+	case string:
+		*e = RiverJobState(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RiverJobState: %T", src)
+	}
+	return nil
+}
+
+type NullRiverJobState struct {
+	RiverJobState RiverJobState `json:"river_job_state"`
+	Valid         bool          `json:"valid"` // Valid is true if RiverJobState is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRiverJobState) Scan(value interface{}) error {
+	if value == nil {
+		ns.RiverJobState, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RiverJobState.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRiverJobState) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RiverJobState), nil
+}
 
 type Activity struct {
 	ID         int64              `json:"id"`
@@ -18,6 +68,7 @@ type Activity struct {
 	Payload    json.RawMessage    `json:"payload"`
 	OccurredAt pgtype.Timestamptz `json:"occurred_at"`
 	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ExternalID pgtype.Text        `json:"external_id"`
 }
 
 type DailySummary struct {
@@ -39,6 +90,67 @@ type DataSource struct {
 	RefreshToken []byte             `json:"refresh_token"`
 	ExpiresAt    pgtype.Timestamptz `json:"expires_at"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type RiverClient struct {
+	ID        string             `json:"id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Metadata  []byte             `json:"metadata"`
+	PausedAt  pgtype.Timestamptz `json:"paused_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RiverClientQueue struct {
+	RiverClientID    string             `json:"river_client_id"`
+	Name             string             `json:"name"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	MaxWorkers       int64              `json:"max_workers"`
+	Metadata         []byte             `json:"metadata"`
+	NumJobsCompleted int64              `json:"num_jobs_completed"`
+	NumJobsRunning   int64              `json:"num_jobs_running"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
+type RiverJob struct {
+	ID           int64              `json:"id"`
+	State        RiverJobState      `json:"state"`
+	Attempt      int16              `json:"attempt"`
+	MaxAttempts  int16              `json:"max_attempts"`
+	AttemptedAt  pgtype.Timestamptz `json:"attempted_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	FinalizedAt  pgtype.Timestamptz `json:"finalized_at"`
+	ScheduledAt  pgtype.Timestamptz `json:"scheduled_at"`
+	Priority     int16              `json:"priority"`
+	Args         []byte             `json:"args"`
+	AttemptedBy  []string           `json:"attempted_by"`
+	Errors       [][]byte           `json:"errors"`
+	Kind         string             `json:"kind"`
+	Metadata     []byte             `json:"metadata"`
+	Queue        string             `json:"queue"`
+	Tags         []string           `json:"tags"`
+	UniqueKey    []byte             `json:"unique_key"`
+	UniqueStates pgtype.Bits        `json:"unique_states"`
+}
+
+type RiverLeader struct {
+	ElectedAt pgtype.Timestamptz `json:"elected_at"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	LeaderID  string             `json:"leader_id"`
+	Name      string             `json:"name"`
+}
+
+type RiverMigration struct {
+	ID        int64              `json:"id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Version   int64              `json:"version"`
+}
+
+type RiverQueue struct {
+	Name      string             `json:"name"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	Metadata  []byte             `json:"metadata"`
+	PausedAt  pgtype.Timestamptz `json:"paused_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 type User struct {
