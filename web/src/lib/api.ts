@@ -37,6 +37,32 @@ export interface LoginResponse {
   user: UserResponse;
 }
 
+export interface Activity {
+  id: number;
+  source: string;
+  type: string;
+  payload: Record<string, unknown>;
+  occurredAt: string;
+}
+
+export interface ActivityListResponse {
+  activities: Activity[];
+  total: number;
+  page: number;
+  perPage: number;
+}
+
+export interface DailySummary {
+  date: string;
+  totalCommits: number;
+  totalPrs: number;
+  codingMinutes: number;
+}
+
+export interface SummaryListResponse {
+  summaries: DailySummary[];
+}
+
 export const api = {
   register: (data: { email: string; name: string; password: string }) =>
     request<UserResponse>("/api/register", {
@@ -51,4 +77,12 @@ export const api = {
     }),
 
   me: () => request<UserResponse>("/api/me"),
+
+  activities: (page = 1, perPage = 20) =>
+    request<ActivityListResponse>(
+      `/api/activities?page=${page}&per_page=${perPage}`
+    ),
+
+  summaries: (days = 30) =>
+    request<SummaryListResponse>(`/api/summaries?days=${days}`),
 };
