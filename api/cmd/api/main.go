@@ -12,6 +12,7 @@ import (
 	riverlib "github.com/riverqueue/river"
 
 	dbgen "github.com/ethanwang/devpulse/api/db/generated"
+	"github.com/ethanwang/devpulse/api/internal/activity"
 	"github.com/ethanwang/devpulse/api/internal/apperror"
 	"github.com/ethanwang/devpulse/api/internal/auth"
 	"github.com/ethanwang/devpulse/api/internal/config"
@@ -111,6 +112,10 @@ func main() {
 	protected.Use(mw.JWTAuth(cfg.JWTSecret))
 	authHandler.RegisterProtectedRoutes(protected)
 	oauthHandler.RegisterRoutes(protected)
+
+	activitySvc := activity.NewService(queries)
+	activityHandler := activity.NewHandler(activitySvc)
+	activityHandler.RegisterRoutes(protected)
 
 	slog.Info("starting server", "port", cfg.Port)
 	if err := e.Start(":" + cfg.Port); err != nil {
