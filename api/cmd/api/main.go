@@ -15,6 +15,7 @@ import (
 	"github.com/ethanwang/devpulse/api/internal/config"
 	mw "github.com/ethanwang/devpulse/api/internal/middleware"
 	"github.com/ethanwang/devpulse/api/internal/oauth"
+	riversetup "github.com/ethanwang/devpulse/api/internal/river"
 )
 
 func main() {
@@ -33,6 +34,20 @@ func main() {
 		return
 	}
 	slog.Info("database connected")
+
+	// River job queue (insert-only until workers are registered)
+	riverClient, err := riversetup.NewClient(pool, nil, nil)
+	if err != nil {
+		slog.Error("failed to create river client", "error", err)
+		return
+	}
+
+	if err := riverClient.Start(context.Background()); err != nil {
+		slog.Error("failed to start river client", "error", err)
+		return
+	}
+	defer riverClient.Stop(context.Background()) //nolint:errcheck
+	slog.Info("river started")
 
 	// Dependency injection
 	queries := dbgen.New(pool)
