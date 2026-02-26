@@ -19,6 +19,7 @@ import (
 	mw "github.com/ethanwang/devpulse/api/internal/middleware"
 	"github.com/ethanwang/devpulse/api/internal/oauth"
 	riversetup "github.com/ethanwang/devpulse/api/internal/river"
+	"github.com/ethanwang/devpulse/api/internal/summary"
 )
 
 func main() {
@@ -49,6 +50,9 @@ func main() {
 	ghSyncWorker := github.NewSyncWorker(queries, ghClient)
 	riverlib.AddWorker(workers, ghSyncWorker)
 
+	aggWorker := summary.NewAggregateWorker(queries)
+	riverlib.AddWorker(workers, aggWorker)
+
 	// River periodic jobs
 	periodicJobs := []*riverlib.PeriodicJob{
 		riverlib.NewPeriodicJob(
@@ -57,6 +61,13 @@ func main() {
 				return github.SyncArgs{}, nil
 			},
 			&riverlib.PeriodicJobOpts{RunOnStart: true},
+		),
+		riverlib.NewPeriodicJob(
+			riverlib.PeriodicInterval(24*time.Hour),
+			func() (riverlib.JobArgs, *riverlib.InsertOpts) {
+				return summary.AggregateArgs{}, nil
+			},
+			nil, // Don't run on start — aggregation is for yesterday's data
 		),
 	}
 
