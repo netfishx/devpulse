@@ -1,0 +1,13 @@
+# Binaries
+devpulse-api
+*.exe
+
+# Environment
+.env
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+.DS_Store

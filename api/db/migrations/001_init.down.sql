@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS daily_summaries;
+DROP TABLE IF EXISTS activities;
+DROP TABLE IF EXISTS data_sources;
+DROP TABLE IF EXISTS users;
