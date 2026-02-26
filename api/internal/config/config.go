@@ -1,6 +1,10 @@
 package config
 
-import "os"
+import (
+	"os"
+
+	"github.com/joho/godotenv"
+)
 
 type Config struct {
 	DatabaseURL        string
@@ -12,6 +16,9 @@ type Config struct {
 }
 
 func Load() *Config {
+	// Best-effort: load .env from project root (api/../.env) and api/.env
+	_ = godotenv.Load("../.env", ".env")
+
 	return &Config{
 		DatabaseURL:        getEnv("DATABASE_URL", "postgres://localhost:5432/devpulse_dev?sslmode=disable"),
 		JWTSecret:          getEnv("JWT_SECRET", "devpulse-dev-secret-change-me"),
