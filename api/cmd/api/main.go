@@ -117,6 +117,10 @@ func main() {
 	activityHandler := activity.NewHandler(activitySvc)
 	activityHandler.RegisterRoutes(protected)
 
+	summarySvc := summary.NewService(queries)
+	summaryHandler := summary.NewHandler(summarySvc)
+	summaryHandler.RegisterRoutes(protected)
+
 	slog.Info("starting server", "port", cfg.Port)
 	if err := e.Start(":" + cfg.Port); err != nil {
 		slog.Error("server stopped", "error", err)
