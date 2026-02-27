@@ -47,8 +47,9 @@ func (h *Handler) List(c *echo.Context) error {
 
 	page, _ := strconv.Atoi(c.QueryParam("page"))
 	perPage, _ := strconv.Atoi(c.QueryParam("per_page"))
+	source := c.QueryParam("source")
 
-	resp, err := h.svc.List(c.Request().Context(), userID, page, perPage)
+	resp, err := h.svc.List(c.Request().Context(), userID, page, perPage, source)
 	if err != nil {
 		return err
 	}

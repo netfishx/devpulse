@@ -32,7 +32,7 @@ func NewService(q *dbgen.Queries) *Service {
 	return &Service{q: q}
 }
 
-func (s *Service) List(ctx context.Context, userID int64, page, perPage int) (*ListResponse, error) {
+func (s *Service) List(ctx context.Context, userID int64, page, perPage int, source string) (*ListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
@@ -42,15 +42,19 @@ func (s *Service) List(ctx context.Context, userID int64, page, perPage int) (*L
 	offset := (page - 1) * perPage
 
 	rows, err := s.q.ListActivitiesByUser(ctx, dbgen.ListActivitiesByUserParams{
-		UserID: userID,
-		Limit:  int32(perPage),
-		Offset: int32(offset),
+		UserID:  userID,
+		Limit:   int32(perPage),
+		Offset:  int32(offset),
+		Column4: source, // "" = no filter
 	})
 	if err != nil {
 		return nil, apperror.Internalf("list activities: %w", err)
 	}
 
-	total, err := s.q.CountActivitiesByUser(ctx, userID)
+	total, err := s.q.CountActivitiesByUser(ctx, dbgen.CountActivitiesByUserParams{
+		UserID:  userID,
+		Column2: source, // "" = no filter
+	})
 	if err != nil {
 		return nil, apperror.Internalf("count activities: %w", err)
 	}

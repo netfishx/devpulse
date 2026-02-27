@@ -16,6 +16,7 @@ import (
 	"github.com/ethanwang/devpulse/api/internal/apperror"
 	"github.com/ethanwang/devpulse/api/internal/auth"
 	"github.com/ethanwang/devpulse/api/internal/config"
+	"github.com/ethanwang/devpulse/api/internal/datasource"
 	"github.com/ethanwang/devpulse/api/internal/github"
 	mw "github.com/ethanwang/devpulse/api/internal/middleware"
 	"github.com/ethanwang/devpulse/api/internal/oauth"
@@ -120,6 +121,10 @@ func main() {
 	summarySvc := summary.NewService(queries)
 	summaryHandler := summary.NewHandler(summarySvc)
 	summaryHandler.RegisterRoutes(protected)
+
+	dsSvc := datasource.NewService(queries)
+	dsHandler := datasource.NewHandler(dsSvc)
+	dsHandler.RegisterRoutes(protected)
 
 	slog.Info("starting server", "port", cfg.Port)
 	if err := e.Start(":" + cfg.Port); err != nil {
