@@ -7,11 +7,14 @@ ON CONFLICT (user_id, source, external_id) DO NOTHING;
 SELECT id, user_id, source, type, payload, occurred_at, external_id, created_at
 FROM activities
 WHERE user_id = $1
+  AND ($4::text = '' OR source = $4)
 ORDER BY occurred_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: CountActivitiesByUser :one
-SELECT count(*) FROM activities WHERE user_id = $1;
+SELECT count(*) FROM activities
+WHERE user_id = $1
+  AND ($2::text = '' OR source = $2);
 
 -- name: ListDistinctActivityUsers :many
 SELECT DISTINCT user_id FROM activities;

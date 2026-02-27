@@ -13,11 +13,18 @@ import (
 )
 
 const countActivitiesByUser = `-- name: CountActivitiesByUser :one
-SELECT count(*) FROM activities WHERE user_id = $1
+SELECT count(*) FROM activities
+WHERE user_id = $1
+  AND ($2::text = '' OR source = $2)
 `
 
-func (q *Queries) CountActivitiesByUser(ctx context.Context, userID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countActivitiesByUser, userID)
+type CountActivitiesByUserParams struct {
+	UserID  int64  `json:"user_id"`
+	Column2 string `json:"column_2"`
+}
+
+func (q *Queries) CountActivitiesByUser(ctx context.Context, arg CountActivitiesByUserParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivitiesByUser, arg.UserID, arg.Column2)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -54,14 +61,16 @@ const listActivitiesByUser = `-- name: ListActivitiesByUser :many
 SELECT id, user_id, source, type, payload, occurred_at, external_id, created_at
 FROM activities
 WHERE user_id = $1
+  AND ($4::text = '' OR source = $4)
 ORDER BY occurred_at DESC
 LIMIT $2 OFFSET $3
 `
 
 type ListActivitiesByUserParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	UserID  int64  `json:"user_id"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
+	Column4 string `json:"column_4"`
 }
 
 type ListActivitiesByUserRow struct {
@@ -76,7 +85,12 @@ type ListActivitiesByUserRow struct {
 }
 
 func (q *Queries) ListActivitiesByUser(ctx context.Context, arg ListActivitiesByUserParams) ([]ListActivitiesByUserRow, error) {
-	rows, err := q.db.Query(ctx, listActivitiesByUser, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listActivitiesByUser,
+		arg.UserID,
+		arg.Limit,
+		arg.Offset,
+		arg.Column4,
+	)
 	if err != nil {
 		return nil, err
 	}
