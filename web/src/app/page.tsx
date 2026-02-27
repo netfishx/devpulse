@@ -2,14 +2,23 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Bar, BarChart, XAxis, YAxis } from "recharts";
-import { GitCommit, GitPullRequest, CalendarDays, LogOut } from "lucide-react";
+import Link from "next/link";
+import {
+  GitCommit,
+  GitPullRequest,
+  CalendarDays,
+  LogOut,
+  Settings,
+} from "lucide-react";
 
 import {
   api,
   type UserResponse,
   type Activity,
   type DailySummary,
+  type PeriodSummary,
+  type HeatmapDay,
+  type RepoStats,
 } from "@/lib/api";
 import {
   Card,
@@ -20,11 +29,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  type ChartConfig,
-} from "@/components/ui/chart";
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import { TrendChart } from "@/components/trend-chart";
+import { Heatmap } from "@/components/heatmap";
+import { TopRepos } from "@/components/top-repos";
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -45,13 +58,6 @@ function formatRelativeTime(dateStr: string): string {
   return `${diffMonth} month${diffMonth === 1 ? "" : "s"} ago`;
 }
 
-function formatDate(dateStr: string): string {
-  const d = new Date(dateStr);
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${month}/${day}`;
-}
-
 function badgeVariantForType(
   type: string
 ): "default" | "secondary" | "outline" | "destructive" {
@@ -69,19 +75,6 @@ function badgeVariantForType(
   }
 }
 
-// -- Chart config -------------------------------------------------------------
-
-const chartConfig = {
-  commits: {
-    label: "Commits",
-    color: "var(--color-chart-1)",
-  },
-  prs: {
-    label: "PRs",
-    color: "var(--color-chart-2)",
-  },
-} satisfies ChartConfig;
-
 // -- Component ----------------------------------------------------------------
 
 export default function DashboardPage() {
@@ -90,6 +83,11 @@ export default function DashboardPage() {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [summaries, setSummaries] = useState<DailySummary[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [weeklySummaries, setWeeklySummaries] = useState<PeriodSummary[]>([]);
+  const [monthlySummaries, setMonthlySummaries] = useState<PeriodSummary[]>([]);
+  const [heatmapDays, setHeatmapDays] = useState<HeatmapDay[]>([]);
+  const [topRepos, setTopRepos] = useState<RepoStats[]>([]);
+  const [source, setSource] = useState("all");
   const [loading, setLoading] = useState(true);
 
   const redirectToLogin = useCallback(() => {
@@ -104,16 +102,34 @@ export default function DashboardPage() {
       return;
     }
 
+    const sourceParam = source === "all" ? "" : source;
+
     async function load() {
       try {
-        const [userData, summaryData, activityData] = await Promise.all([
+        const [
+          userData,
+          summaryData,
+          activityData,
+          weeklyData,
+          monthlyData,
+          heatmapData,
+          reposData,
+        ] = await Promise.all([
           api.me(),
-          api.summaries(30),
-          api.activities(1, 20),
+          api.summaries(60),
+          api.activities(1, 20, sourceParam),
+          api.weeklySummaries(24),
+          api.monthlySummaries(24),
+          api.heatmap(365),
+          api.topRepos(30, sourceParam),
         ]);
         setUser(userData);
         setSummaries(summaryData.summaries);
         setActivities(activityData.activities);
+        setWeeklySummaries(weeklyData.summaries);
+        setMonthlySummaries(monthlyData.summaries);
+        setHeatmapDays(heatmapData.days);
+        setTopRepos(reposData.repos);
       } catch {
         redirectToLogin();
       } finally {
@@ -122,7 +138,7 @@ export default function DashboardPage() {
     }
 
     load();
-  }, [router, redirectToLogin]);
+  }, [router, redirectToLogin, source]);
 
   const handleLogout = () => {
     redirectToLogin();
@@ -140,19 +156,36 @@ export default function DashboardPage() {
     );
   }
 
-  // Computed summary values
-  const totalCommits = summaries.reduce((sum, s) => sum + s.totalCommits, 0);
-  const totalPrs = summaries.reduce((sum, s) => sum + s.totalPrs, 0);
-  const activeDays = summaries.filter(
+  // Period-over-period comparison (60 days split into current 30 + previous 30)
+  const current30 = summaries.slice(0, 30);
+  const prev30 = summaries.slice(30, 60);
+
+  const currentCommits = current30.reduce((s, d) => s + d.totalCommits, 0);
+  const prevCommits = prev30.reduce((s, d) => s + d.totalCommits, 0);
+  const commitsDelta =
+    prevCommits > 0
+      ? Math.round(((currentCommits - prevCommits) / prevCommits) * 100)
+      : 0;
+
+  const currentPrs = current30.reduce((s, d) => s + d.totalPrs, 0);
+  const prevPrs = prev30.reduce((s, d) => s + d.totalPrs, 0);
+  const prsDelta =
+    prevPrs > 0
+      ? Math.round(((currentPrs - prevPrs) / prevPrs) * 100)
+      : 0;
+
+  const activeDays = current30.filter(
     (s) => s.totalCommits > 0 || s.totalPrs > 0
   ).length;
-
-  // Chart data
-  const chartData = summaries.map((s) => ({
-    date: formatDate(s.date),
-    commits: s.totalCommits,
-    prs: s.totalPrs,
-  }));
+  const prevActiveDays = prev30.filter(
+    (s) => s.totalCommits > 0 || s.totalPrs > 0
+  ).length;
+  const activeDaysDelta =
+    prevActiveDays > 0
+      ? Math.round(
+          ((activeDays - prevActiveDays) / prevActiveDays) * 100
+        )
+      : 0;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -163,6 +196,30 @@ export default function DashboardPage() {
           <span className="text-sm text-muted-foreground">
             {user?.name ?? ""}
           </span>
+          <Select
+            value={source}
+            onValueChange={(value) => {
+              if (value != null) setSource(value);
+            }}
+          >
+            <SelectTrigger size="sm">
+              <SelectValue placeholder="All Sources" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All</SelectItem>
+              <SelectItem value="github">GitHub</SelectItem>
+              <SelectItem value="wakatime" disabled>
+                Wakatime
+              </SelectItem>
+            </SelectContent>
+          </Select>
+          <Link
+            href="/settings"
+            className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <Settings className="size-4" />
+            Settings
+          </Link>
           <Button variant="ghost" size="sm" onClick={handleLogout}>
             <LogOut data-icon="inline-start" />
             Logout
@@ -182,7 +239,19 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{totalCommits}</p>
+              <div className="flex flex-col gap-1">
+                <p className="text-3xl font-bold tabular-nums">
+                  {currentCommits}
+                </p>
+                {commitsDelta !== 0 && (
+                  <p
+                    className={`text-xs font-medium ${commitsDelta > 0 ? "text-emerald-600" : "text-red-500"}`}
+                  >
+                    {commitsDelta > 0 ? "\u2191" : "\u2193"}
+                    {Math.abs(commitsDelta)}% vs prev 30d
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -194,7 +263,17 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{totalPrs}</p>
+              <div className="flex flex-col gap-1">
+                <p className="text-3xl font-bold tabular-nums">{currentPrs}</p>
+                {prsDelta !== 0 && (
+                  <p
+                    className={`text-xs font-medium ${prsDelta > 0 ? "text-emerald-600" : "text-red-500"}`}
+                  >
+                    {prsDelta > 0 ? "\u2191" : "\u2193"}
+                    {Math.abs(prsDelta)}% vs prev 30d
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
 
@@ -206,43 +285,47 @@ export default function DashboardPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-bold tabular-nums">{activeDays}</p>
+              <div className="flex flex-col gap-1">
+                <p className="text-3xl font-bold tabular-nums">{activeDays}</p>
+                {activeDaysDelta !== 0 && (
+                  <p
+                    className={`text-xs font-medium ${activeDaysDelta > 0 ? "text-emerald-600" : "text-red-500"}`}
+                  >
+                    {activeDaysDelta > 0 ? "\u2191" : "\u2193"}
+                    {Math.abs(activeDaysDelta)}% vs prev 30d
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* 30-Day Activity Bar Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle>30-Day Activity</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <BarChart data={chartData} accessibilityLayer>
-                <XAxis
-                  dataKey="date"
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value: string) => value}
-                />
-                <YAxis tickLine={false} axisLine={false} />
-                <ChartTooltip content={<ChartTooltipContent />} />
-                <Bar
-                  dataKey="commits"
-                  stackId="activity"
-                  fill="var(--color-commits)"
-                  radius={[0, 0, 0, 0]}
-                />
-                <Bar
-                  dataKey="prs"
-                  stackId="activity"
-                  fill="var(--color-prs)"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+        {/* Activity Trends (replaces the old 30-day bar chart) */}
+        <TrendChart
+          dailySummaries={summaries}
+          weeklySummaries={weeklySummaries}
+          monthlySummaries={monthlySummaries}
+        />
+
+        {/* Top Repos + Heatmap */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardTitle>Top Repos</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <TopRepos repos={topRepos} />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Contributions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Heatmap days={heatmapDays} />
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Activity Timeline */}
         <Card>
