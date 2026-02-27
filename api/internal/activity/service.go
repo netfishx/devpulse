@@ -73,3 +73,43 @@ func (s *Service) List(ctx context.Context, userID int64, page, perPage int) (*L
 		PerPage:    perPage,
 	}, nil
 }
+
+type RepoStats struct {
+	Name       string `json:"name"`
+	Count      int    `json:"count"`
+	LastActive string `json:"lastActive"`
+}
+
+type TopReposResponse struct {
+	Repos []RepoStats `json:"repos"`
+}
+
+func (s *Service) TopRepos(ctx context.Context, userID int64, days int, source string) (*TopReposResponse, error) {
+	if days < 1 || days > 365 {
+		days = 30
+	}
+
+	rows, err := s.q.ListTopRepos(ctx, dbgen.ListTopReposParams{
+		UserID:  userID,
+		Column2: int32(days),
+	})
+	if err != nil {
+		return nil, apperror.Internalf("list top repos: %w", err)
+	}
+
+	repos := make([]RepoStats, 0, len(rows))
+	for _, r := range rows {
+		name, _ := r.Name.(string)
+		lastActive := ""
+		if t, ok := r.LastActive.(time.Time); ok {
+			lastActive = t.Format(time.DateOnly)
+		}
+		repos = append(repos, RepoStats{
+			Name:       name,
+			Count:      int(r.Count),
+			LastActive: lastActive,
+		})
+	}
+
+	return &TopReposResponse{Repos: repos}, nil
+}
