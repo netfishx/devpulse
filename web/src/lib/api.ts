@@ -63,6 +63,48 @@ export interface SummaryListResponse {
   summaries: DailySummary[];
 }
 
+export interface PeriodSummary {
+  period: string;
+  totalCommits: number;
+  totalPrs: number;
+  codingMinutes: number;
+}
+
+export interface PeriodSummariesResponse {
+  summaries: PeriodSummary[];
+}
+
+export interface HeatmapDay {
+  date: string;
+  level: number;
+  count: number;
+}
+
+export interface HeatmapResponse {
+  days: HeatmapDay[];
+}
+
+export interface RepoStats {
+  name: string;
+  count: number;
+  lastActive: string;
+}
+
+export interface TopReposResponse {
+  repos: RepoStats[];
+}
+
+export interface DataSourceInfo {
+  id: number;
+  provider: string;
+  connected: boolean;
+  connectedAt: string;
+}
+
+export interface DataSourcesResponse {
+  sources: DataSourceInfo[];
+}
+
 export const api = {
   register: (data: { email: string; name: string; password: string }) =>
     request<UserResponse>("/api/register", {
@@ -78,11 +120,28 @@ export const api = {
 
   me: () => request<UserResponse>("/api/me"),
 
-  activities: (page = 1, perPage = 20) =>
+  activities: (page = 1, perPage = 20, source = "") =>
     request<ActivityListResponse>(
-      `/api/activities?page=${page}&per_page=${perPage}`
+      `/api/activities?page=${page}&per_page=${perPage}${source ? `&source=${source}` : ""}`
     ),
 
   summaries: (days = 30) =>
     request<SummaryListResponse>(`/api/summaries?days=${days}`),
+
+  weeklySummaries: (weeks = 12) =>
+    request<PeriodSummariesResponse>(`/api/summaries/weekly?weeks=${weeks}`),
+
+  monthlySummaries: (months = 12) =>
+    request<PeriodSummariesResponse>(`/api/summaries/monthly?months=${months}`),
+
+  heatmap: (days = 365) =>
+    request<HeatmapResponse>(`/api/summaries/heatmap?days=${days}`),
+
+  topRepos: (days = 30, source = "") =>
+    request<TopReposResponse>(
+      `/api/activities/top-repos?days=${days}${source ? `&source=${source}` : ""}`
+    ),
+
+  dataSources: () =>
+    request<DataSourcesResponse>("/api/data-sources"),
 };
